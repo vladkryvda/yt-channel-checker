@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Grabber</title>
+    <title>Live Video Grabber</title>
     <style>
         :root {
             --bg-color: #0f0f0f;
@@ -21,7 +21,7 @@
             background-color: var(--bg-color);
             color: var(--text-primary);
             margin: 0;
-            padding: 40px 20px 120px 20px; /* Відступ знизу для поля вводу */
+            padding: 40px 20px 140px 20px; /* Відступ знизу для поля вводу */
             display: flex;
             justify-content: center;
         }
@@ -31,7 +31,6 @@
             max-width: 1200px;
         }
 
-        /* Автоматична сітка */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -71,26 +70,26 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            filter: brightness(70%) grayscale(20%);
+            filter: brightness(65%) grayscale(20%);
             transition: filter 0.3s;
         }
 
         .card:hover .thumbnail-box img {
-            filter: brightness(85%) grayscale(0%);
+            filter: brightness(80%) grayscale(0%);
         }
 
-        /* Затемнення для кращої читабельності тексту поверх картинки */
+        /* Світлотінь поверх зображення */
         .scrim {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.7) 100%);
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0.6) 100%);
             z-index: 1;
         }
 
-        /* Назва відео знизу зображення */
+        /* Назва відео внизу поверх зображення */
         .video-title {
             position: absolute;
             bottom: 16px;
@@ -115,12 +114,12 @@
             font-size: 0.7rem;
             color: var(--accent-color);
             z-index: 2;
-            background-color: rgba(0, 0, 0, 0.6);
-            padding: 2px 6px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 3px 8px;
             border-radius: 4px;
         }
 
-        /* Стан копіювання на самій картці */
+        /* Стан копіювання */
         .copy-overlay {
             position: absolute;
             top: 0;
@@ -136,13 +135,14 @@
             opacity: 0;
             z-index: 3;
             transition: opacity 0.2s;
+            text-align: center;
         }
 
         .card.copied .copy-overlay {
             opacity: 1;
         }
 
-        /* Поле вводу у вигляді тонкої лінії внизу сторінки */
+        /* Світла смуга для вводу URL */
         .input-bar {
             position: fixed;
             bottom: 40px;
@@ -171,12 +171,14 @@
             border-bottom-color: var(--accent-color);
         }
 
-        /* Заглушка порожнього стану */
         .placeholder-text {
             text-align: center;
             color: var(--text-secondary);
             font-size: 0.8rem;
             margin-top: 100px;
+            line-height: 1.8;
+            width: 100%;
+            grid-column: 1 / -1;
         }
     </style>
 </head>
@@ -185,63 +187,141 @@
     <div class="wrapper">
         <div class="grid" id="videoGrid">
             <div class="placeholder-text" id="placeholder">
-                [ вставте url каналу в поле знизу для завантаження ]
+                [ вставте url каналу в поле знизу ]
             </div>
         </div>
     </div>
 
-    <!-- Тонка світла смуга для вводу внизу -->
     <div class="input-bar">
-        <input type="text" id="channelUrl" placeholder="____________________ введіть url тут ____________________" autocomplete="off">
+        <input type="text" id="channelUrl" placeholder="____________________ вставте url каналу тут ____________________" autocomplete="off">
     </div>
 
     <script>
-        // Імітація бази даних для демонстрації
-        const mockDatabase = [
-            {
-                id: "dQw4w9WgXcQ",
-                title: "> Building microservices with Go and gRPC",
-                thumbnail: "https://images.unsplash.com/photo-1618401471353-b98aedd07871?auto=format&fit=crop&w=600&q=80",
-                date: "[ 2 hours ago ]"
-            },
-            {
-                id: "yPYZpwSpKGA",
-                title: "> Advanced React performance optimization patterns",
-                thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=600&q=80",
-                date: "[ 1 day ago ]"
-            },
-            {
-                id: "3JZ_D3K6DgU",
-                title: "> Linux networking essentials for backend devs",
-                thumbnail: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=600&q=80",
-                date: "[ 3 days ago ]"
-            },
-            {
-                id: "Ke90Tje7VS0",
-                title: "> Rust memory management model explained",
-                thumbnail: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
-                date: "[ 5 days ago ]"
-            }
-        ];
-
         const inputField = document.getElementById('channelUrl');
         const grid = document.getElementById('videoGrid');
+        let debounceTimer;
 
-        // Слухаємо подію введення тексту або вставки (paste) для автоматичного спрацювання
+        // Подія зміни тексту в полі вводу (з затримкою для запобігання надмірним запитам)
         inputField.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
             const val = inputField.value.trim();
-            if (val.length > 5) { // Спрацьовує, якщо введено мінімальну адресу
-                renderVideos(mockDatabase);
-            } else if (val.length === 0) {
-                // Повертаємо початковий стан, якщо поле очищено
-                grid.innerHTML = `
-                    <div class="placeholder-text" id="placeholder">
-                        [ вставте url каналу в поле знизу для завантаження ]
-                    </div>
-                `;
+            
+            if (val.length === 0) {
+                grid.innerHTML = '<div class="placeholder-text">[ вставте url каналу в поле знизу ]</div>';
+                return;
             }
+
+            grid.innerHTML = '<div class="placeholder-text">[ ОЧІКУВАННЯ ЗАВЕРШЕННЯ ВВОДУ... ]</div>';
+            
+            // Робимо затримку у 800мс після останнього натискання клавіші перед початком пошуку
+            debounceTimer = setTimeout(() => {
+                processChannel(val);
+            }, 800);
         });
 
+        async function processChannel(input) {
+            grid.innerHTML = '<div class="placeholder-text">[ КРОК 1/2: ПОШУК ID КАНАЛУ... ]</div>';
+            
+            try {
+                const channelId = await getChannelId(input);
+                grid.innerHTML = '<div class="placeholder-text">[ КРОК 2/2: ОТРИМАННЯ ОСТАННІХ ВІДЕО... ]</div>';
+                
+                const videos = await fetchLatestVideos(channelId);
+                renderVideos(videos);
+            } catch (error) {
+                grid.innerHTML = `<div class="placeholder-text" style="color: var(--accent-color)">[ ПОМИЛКА: ${error.message} ]</div>`;
+            }
+        }
+
+        // Крок 1: Отримання унікального ідентифікатора каналу (UCxxxxxxxxx) з його сторінки
+        async function getChannelId(input) {
+            // Перевірка, чи це вже готовий Channel ID
+            const directIdMatch = input.match(/(UC[a-zA-Z0-9_-]{22})/);
+            if (directIdMatch) return directIdMatch[1];
+
+            // Форматування вводу у валідну адресу
+            let targetUrl = input;
+            if (input.startsWith('@')) {
+                targetUrl = `https://www.youtube.com/${input}`;
+            } else if (!input.startsWith('http')) {
+                targetUrl = `https://www.youtube.com/@${input}`;
+            }
+
+            // Використання публічного проксі-сервера AllOrigins для обходу CORS
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+            
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error("Не вдалося зв'язатися з проксі-сервером");
+            
+            const data = await response.json();
+            const html = data.contents;
+
+            if (!html) throw new Error("Канал не знайдено або доступ обмежено");
+
+            // Пошук ID каналу в коді сторінки за допомогою різних шаблонів YouTube
+            const idPatterns = [
+                /"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/,
+                /itemprop="channelId"\s+content="(UC[a-zA-Z0-9_-]{22})"/,
+                /meta\s+property="og:url"\s+content="[^"]*\/channel\/(UC[a-zA-Z0-9_-]{22})"/
+            ];
+
+            for (let pattern of idPatterns) {
+                const match = html.match(pattern);
+                if (match && match[1]) return match[1];
+            }
+
+            throw new Error("Не вдалося розпізнати ID каналу. Перевірте правильність посилання.");
+        }
+
+        // Крок 2: Отримання та розбір RSS-стрічки останніх відео
+        async function fetchLatestVideos(channelId) {
+            const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error("Не вдалося завантажити RSS-стрічку");
+
+            const data = await response.json();
+            const xmlText = data.contents;
+
+            // Парсинг отриманого XML-документа в браузері
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const entries = xmlDoc.getElementsByTagName("entry");
+
+            if (entries.length === 0) throw new Error("На каналі немає завантажених відео");
+
+            const videos = [];
+            // Отримуємо до 6 останніх відео
+            const limit = Math.min(entries.length, 6);
+
+            for (let i = 0; i < limit; i++) {
+                const entry = entries[i];
+                const videoId = entry.getElementsByTagName("yt:videoId")[0]?.textContent;
+                const title = entry.getElementsByTagName("title")[0]?.textContent;
+                const published = entry.getElementsByTagName("published")[0]?.textContent;
+
+                if (videoId && title) {
+                    videos.push({
+                        id: videoId,
+                        title: `> ${title}`,
+                        thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                        date: `[ ${formatDate(published)} ]`
+                    });
+                }
+            }
+
+            return videos;
+        }
+
+        // Форматування дати у зручний вигляд
+        function formatDate(isoString) {
+            if (!isoString) return "unknown";
+            const date = new Date(isoString);
+            return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
+        }
+
+        // Виведення результатів
         function renderVideos(videos) {
             grid.innerHTML = '';
 
@@ -268,14 +348,15 @@
             });
         }
 
+        // Копіювання посилання в буфер обміну
         function copyToClipboard(url, cardElement) {
             navigator.clipboard.writeText(url).then(() => {
                 cardElement.classList.add('copied');
                 setTimeout(() => {
                     cardElement.classList.remove('copied');
-                }, 1200);
+                }, 1000);
             }).catch(err => {
-                console.error('Не вдалося скопіювати: ', err);
+                console.error('Помилка копіювання: ', err);
             });
         }
     </script>

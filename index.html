@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Grabber</title>
+    <style>
+        :root {
+            --bg-color: #0f0f0f;
+            --card-bg: #161616;
+            --border-color: #262626;
+            --text-primary: #f0f0f0;
+            --text-secondary: #8c8c8c;
+            --accent-color: #d4b295;
+            --success-color: #8fb996;
+            --font-mono: "Courier New", Courier, monospace;
+        }
+
+        body {
+            font-family: var(--font-mono);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 40px 20px 120px 20px; /* Відступ знизу для поля вводу */
+            display: flex;
+            justify-content: center;
+        }
+
+        .wrapper {
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        /* Автоматична сітка */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        /* Стиль карток */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+            aspect-ratio: 16 / 10;
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), 
+                        border-color 0.3s, 
+                        box-shadow 0.3s;
+        }
+
+        /* Ефект вспливання при наведенні */
+        .card:hover {
+            transform: translateY(-8px);
+            border-color: var(--accent-color);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
+        }
+
+        .thumbnail-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .thumbnail-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            filter: brightness(70%) grayscale(20%);
+            transition: filter 0.3s;
+        }
+
+        .card:hover .thumbnail-box img {
+            filter: brightness(85%) grayscale(0%);
+        }
+
+        /* Затемнення для кращої читабельності тексту поверх картинки */
+        .scrim {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.7) 100%);
+            z-index: 1;
+        }
+
+        /* Назва відео знизу зображення */
+        .video-title {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            right: 16px;
+            font-size: 0.8rem;
+            font-weight: normal;
+            margin: 0;
+            z-index: 2;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Дата випуску зверху справа */
+        .video-date {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            font-size: 0.7rem;
+            color: var(--accent-color);
+            z-index: 2;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Стан копіювання на самій картці */
+        .copy-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 15, 15, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            color: var(--success-color);
+            opacity: 0;
+            z-index: 3;
+            transition: opacity 0.2s;
+        }
+
+        .card.copied .copy-overlay {
+            opacity: 1;
+        }
+
+        /* Поле вводу у вигляді тонкої лінії внизу сторінки */
+        .input-bar {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 40px);
+            max-width: 500px;
+            z-index: 10;
+        }
+
+        .input-bar input[type="text"] {
+            width: 100%;
+            background-color: transparent;
+            border: none;
+            border-bottom: 1px solid #333;
+            color: var(--text-primary);
+            padding: 12px 0;
+            font-size: 0.9rem;
+            font-family: var(--font-mono);
+            outline: none;
+            text-align: center;
+            transition: border-bottom-color 0.3s;
+        }
+
+        .input-bar input[type="text"]:focus {
+            border-bottom-color: var(--accent-color);
+        }
+
+        /* Заглушка порожнього стану */
+        .placeholder-text {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-top: 100px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="wrapper">
+        <div class="grid" id="videoGrid">
+            <div class="placeholder-text" id="placeholder">
+                [ вставте url каналу в поле знизу для завантаження ]
+            </div>
+        </div>
+    </div>
+
+    <!-- Тонка світла смуга для вводу внизу -->
+    <div class="input-bar">
+        <input type="text" id="channelUrl" placeholder="____________________ введіть url тут ____________________" autocomplete="off">
+    </div>
+
+    <script>
+        // Імітація бази даних для демонстрації
+        const mockDatabase = [
+            {
+                id: "dQw4w9WgXcQ",
+                title: "> Building microservices with Go and gRPC",
+                thumbnail: "https://images.unsplash.com/photo-1618401471353-b98aedd07871?auto=format&fit=crop&w=600&q=80",
+                date: "[ 2 hours ago ]"
+            },
+            {
+                id: "yPYZpwSpKGA",
+                title: "> Advanced React performance optimization patterns",
+                thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=600&q=80",
+                date: "[ 1 day ago ]"
+            },
+            {
+                id: "3JZ_D3K6DgU",
+                title: "> Linux networking essentials for backend devs",
+                thumbnail: "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?auto=format&fit=crop&w=600&q=80",
+                date: "[ 3 days ago ]"
+            },
+            {
+                id: "Ke90Tje7VS0",
+                title: "> Rust memory management model explained",
+                thumbnail: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=600&q=80",
+                date: "[ 5 days ago ]"
+            }
+        ];
+
+        const inputField = document.getElementById('channelUrl');
+        const grid = document.getElementById('videoGrid');
+
+        // Слухаємо подію введення тексту або вставки (paste) для автоматичного спрацювання
+        inputField.addEventListener('input', () => {
+            const val = inputField.value.trim();
+            if (val.length > 5) { // Спрацьовує, якщо введено мінімальну адресу
+                renderVideos(mockDatabase);
+            } else if (val.length === 0) {
+                // Повертаємо початковий стан, якщо поле очищено
+                grid.innerHTML = `
+                    <div class="placeholder-text" id="placeholder">
+                        [ вставте url каналу в поле знизу для завантаження ]
+                    </div>
+                `;
+            }
+        });
+
+        function renderVideos(videos) {
+            grid.innerHTML = '';
+
+            videos.forEach(video => {
+                const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => copyToClipboard(videoUrl, card);
+
+                card.innerHTML = `
+                    <div class="copy-overlay">
+                        +----------------------+<br>
+                        |    [ COPIED URL ]    |<br>
+                        +----------------------+
+                    </div>
+                    <div class="thumbnail-box">
+                        <img src="${video.thumbnail}" alt="${video.title}">
+                        <div class="scrim"></div>
+                    </div>
+                    <div class="video-date">${video.date}</div>
+                    <h3 class="video-title">${video.title}</h3>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function copyToClipboard(url, cardElement) {
+            navigator.clipboard.writeText(url).then(() => {
+                cardElement.classList.add('copied');
+                setTimeout(() => {
+                    cardElement.classList.remove('copied');
+                }, 1200);
+            }).catch(err => {
+                console.error('Не вдалося скопіювати: ', err);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instant Video Grabber</title>
+    <title>Official YouTube API Grabber</title>
     <style>
         :root {
             --bg-color: #0f0f0f;
@@ -21,7 +21,7 @@
             background-color: var(--bg-color);
             color: var(--text-primary);
             margin: 0;
-            padding: 40px 20px 140px 20px;
+            padding: 40px 20px 180px 20px; /* Місце для полів знизу */
             display: flex;
             justify-content: center;
         }
@@ -136,31 +136,35 @@
             opacity: 1;
         }
 
-        .input-bar {
+        /* Нижня панель керування */
+        .controls-panel {
             position: fixed;
-            bottom: 40px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             width: calc(100% - 40px);
             max-width: 500px;
             z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
-        .input-bar input[type="text"] {
+        .controls-panel input[type="text"] {
             width: 100%;
             background-color: transparent;
             border: none;
             border-bottom: 1px solid #333;
             color: var(--text-primary);
-            padding: 12px 0;
-            font-size: 0.9rem;
+            padding: 10px 0;
+            font-size: 0.85rem;
             font-family: var(--font-mono);
             outline: none;
             text-align: center;
             transition: border-bottom-color 0.3s;
         }
 
-        .input-bar input[type="text"]:focus {
+        .controls-panel input[type="text"]:focus {
             border-bottom-color: var(--accent-color);
         }
 
@@ -180,139 +184,143 @@
     <div class="wrapper">
         <div class="grid" id="videoGrid">
             <div class="placeholder-text" id="placeholder">
-                [ вставте url каналу в поле знизу ]
+                [ введіть ваш API Key та вставте url каналу в поля знизу ]
             </div>
         </div>
     </div>
 
-    <div class="input-bar">
-        <input type="text" id="channelUrl" placeholder="____________________ вставте url каналу тут ____________________" autocomplete="off">
+    <!-- Нижня панель із полями вводу -->
+    <div class="controls-panel">
+        <input type="text" id="apiKey" placeholder="____________________ вставте сюди API KEY ____________________" autocomplete="off">
+        <input type="text" id="channelUrl" placeholder="__________________ вставте url каналу або @юзернейм __________________" autocomplete="off">
     </div>
 
     <script>
+        const apiKeyField = document.getElementById('apiKey');
         const inputField = document.getElementById('channelUrl');
         const grid = document.getElementById('videoGrid');
         let debounceTimer;
 
+        // Зберігаємо API-ключ у браузері, щоб не вводити його щоразу
+        if (localStorage.getItem('yt_api_key')) {
+            apiKeyField.value = localStorage.getItem('yt_api_key');
+        }
+
+        apiKeyField.addEventListener('input', () => {
+            localStorage.setItem('yt_api_key', apiKeyField.value.trim());
+        });
+
         inputField.addEventListener('input', () => {
             clearTimeout(debounceTimer);
             const val = inputField.value.trim();
+            const key = apiKeyField.value.trim();
             
+            if (!key) {
+                grid.innerHTML = '<div class="placeholder-text" style="color: var(--accent-color)">[ ПОМИЛКА: Будь ласка, вставте спочатку ваш Google API Key ]</div>';
+                return;
+            }
+
             if (val.length === 0) {
-                grid.innerHTML = '<div class="placeholder-text">[ вставте url каналу в поле знизу ]</div>';
+                grid.innerHTML = '<div class="placeholder-text">[ вставте url каналу або @юзернейм ]</div>';
                 return;
             }
 
             grid.innerHTML = '<div class="placeholder-text">[ ОЧІКУВАННЯ ЗАВЕРШЕННЯ ВВОДУ... ]</div>';
             
             debounceTimer = setTimeout(() => {
-                processChannel(val);
-            }, 600); // Скорочено час очікування після вводу
+                fetchVideosFromAPI(val, key);
+            }, 500);
         });
 
-        // Функція для вилучення чистого URL з посилань-редиректів Google
-        function sanitizeInput(input) {
+        // Аналіз типу вводу (чи це посилання, @юзернейм чи прямий ID)
+        function parseInput(input) {
             let clean = input.trim();
+            
+            // Якщо посилання з редиректу Google
             try {
                 if (clean.includes('google.com')) {
                     const urlObj = new URL(clean);
                     const realUrl = urlObj.searchParams.get('url') || urlObj.searchParams.get('q');
-                    if (realUrl) {
-                        clean = realUrl;
-                    }
+                    if (realUrl) clean = realUrl;
                 }
-            } catch (e) {
-                // якщо парсинг URL не вдався, залишаємо як є
+            } catch (e) {}
+
+            const handleMatch = clean.match(/(@[a-zA-Z0-9._-]+)/);
+            if (handleMatch) return { type: 'handle', value: handleMatch[1] };
+
+            const idMatch = clean.match(/(UC[a-zA-Z0-9_-]{22})/);
+            if (idMatch) return { type: 'id', value: idMatch[1] };
+
+            // Спроба знайти просто назву або юзернейм
+            if (clean.startsWith('http')) {
+                const parts = clean.split('/');
+                const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
+                if (lastPart.startsWith('@')) return { type: 'handle', value: lastPart };
+                return { type: 'handle', value: '@' + lastPart };
             }
-            return clean;
+
+            return { type: 'handle', value: clean.startsWith('@') ? clean : '@' + clean };
         }
 
-        async function processChannel(rawInput) {
-            const input = sanitizeInput(rawInput);
-            grid.innerHTML = '<div class="placeholder-text">[ ПОШУК ID КАНАЛУ... ]</div>';
-            
+        async function fetchVideosFromAPI(input, key) {
+            const parsed = parseInput(input);
+            grid.innerHTML = '<div class="placeholder-text">[ КРОК 1: ОТРИМАННЯ ДАНИХ КАНАЛУ... ]</div>';
+
             try {
-                const channelId = await getChannelId(input);
-                grid.innerHTML = '<div class="placeholder-text">[ ЗАВАНТАЖЕННЯ ВІДЕО... ]</div>';
-                
-                const videos = await fetchLatestVideos(channelId);
-                renderVideos(videos);
-            } catch (error) {
-                grid.innerHTML = `<div class="placeholder-text" style="color: var(--accent-color)">[ ПОМИЛКА: ${error.message} ]</div>`;
-            }
-        }
-
-        // Крок 1: Отримання ID за допомогою швидкого проксі corsproxy.io
-        async function getChannelId(input) {
-            const directIdMatch = input.match(/(UC[a-zA-Z0-9_-]{22})/);
-            if (directIdMatch) return directIdMatch[1];
-
-            let targetUrl = input;
-            if (input.startsWith('@')) {
-                targetUrl = `https://www.youtube.com/${input}`;
-            } else if (!input.startsWith('http')) {
-                targetUrl = `https://www.youtube.com/@${input}`;
-            }
-
-            // Швидкий проксі-сервер corsproxy.io
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-            
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error("Не вдалося підключитися до швидкого проксі");
-            
-            const html = await response.text();
-            if (!html) throw new Error("Порожня відповідь від сторінки каналу");
-
-            const idPatterns = [
-                /"channelId"\s*:\s*"(UC[a-zA-Z0-9_-]{22})"/,
-                /itemprop="channelId"\s+content="(UC[a-zA-Z0-9_-]{22})"/,
-                /meta\s+property="og:url"\s+content="[^"]*\/channel\/(UC[a-zA-Z0-9_-]{22})"/
-            ];
-
-            for (let pattern of idPatterns) {
-                const match = html.match(pattern);
-                if (match && match[1]) return match[1];
-            }
-
-            throw new Error("Не знайдено ID каналу. Переконайтеся, що посилання веде безпосередньо на YouTube.");
-        }
-
-        // Крок 2: Отримання та розбір RSS-стрічки через corsproxy.io (майже миттєво)
-        async function fetchLatestVideos(channelId) {
-            const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(rssUrl)}`;
-
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error("Помилка завантаження стрічки останніх відео");
-
-            const xmlText = await response.text();
-
-            const parser = new DOMParser();
-            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-            const entries = xmlDoc.getElementsByTagName("entry");
-
-            if (entries.length === 0) throw new Error("На каналі немає опублікованих відео");
-
-            const videos = [];
-            const limit = Math.min(entries.length, 6);
-
-            for (let i = 0; i < limit; i++) {
-                const entry = entries[i];
-                const videoId = entry.getElementsByTagName("yt:videoId")[0]?.textContent;
-                const title = entry.getElementsByTagName("title")[0]?.textContent;
-                const published = entry.getElementsByTagName("published")[0]?.textContent;
-
-                if (videoId && title) {
-                    videos.push({
-                        id: videoId,
-                        title: `> ${title}`,
-                        thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-                        date: `[ ${formatDate(published)} ]`
-                    });
+                let channelQueryUrl = '';
+                if (parsed.type === 'handle') {
+                    channelQueryUrl = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&forHandle=${encodeURIComponent(parsed.value)}&key=${key}`;
+                } else if (parsed.type === 'id') {
+                    channelQueryUrl = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${encodeURIComponent(parsed.value)}&key=${key}`;
+                } else {
+                    throw new Error("Нерозпізнаний формат вводу. Введіть @username або посилання.");
                 }
-            }
 
-            return videos;
+                const channelRes = await fetch(channelQueryUrl);
+                const channelData = await channelRes.json();
+
+                if (channelData.error) {
+                    throw new Error(channelData.error.message);
+                }
+
+                if (!channelData.items || channelData.items.length === 0) {
+                    throw new Error("Канал не знайдено. Перевірте правильність імені.");
+                }
+
+                // Кожен канал на YouTube має системний плейлист "uploads", де зберігаються всі завантаження
+                const uploadsPlaylistId = channelData.items[0].contentDetails.relatedPlaylists.uploads;
+
+                grid.innerHTML = '<div class="placeholder-text">[ КРОК 2: ОТРИМАННЯ ОСТАННІХ ВІДЕО... ]</div>';
+
+                // Запит на отримання останніх 6 елементів із плейлиста "uploads"
+                const playlistQueryUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=6&key=${key}`;
+                const playlistRes = await fetch(playlistQueryUrl);
+                const playlistData = await playlistRes.json();
+
+                if (playlistData.error) {
+                    throw new Error(playlistData.error.message);
+                }
+
+                const items = playlistData.items || [];
+                if (items.length === 0) {
+                    throw new Error("На каналі немає опублікованих відео.");
+                }
+
+                const videos = items.map(item => {
+                    const videoId = item.snippet.resourceId.videoId;
+                    return {
+                        id: videoId,
+                        title: `> ${item.snippet.title}`,
+                        thumbnail: item.snippet.thumbnails?.medium?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                        date: `[ ${formatDate(item.snippet.publishedAt)} ]`
+                    };
+                });
+
+                renderVideos(videos);
+
+            } catch (err) {
+                grid.innerHTML = `<div class="placeholder-text" style="color: var(--accent-color)">[ API ERROR: ${err.message} ]</div>`;
+            }
         }
 
         function formatDate(isoString) {

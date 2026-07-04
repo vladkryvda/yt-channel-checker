@@ -1,370 +1,279 @@
 <!DOCTYPE html>
 <html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Official YouTube API Grabber</title>
-    <style>
-        :root {
-            --bg-color: #0f0f0f;
-            --card-bg: #161616;
-            --border-color: #262626;
-            --text-primary: #f0f0f0;
-            --text-secondary: #8c8c8c;
-            --accent-color: #d4b295;
-            --success-color: #8fb996;
-            --font-mono: "Courier New", Courier, monospace;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>channel:// latest uploads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #121212;
+    --border: #232323;
+    --border-hover: #3a3a3a;
+    --text: #e7e4dc;
+    --text-dim: #7a776e;
+    --text-faint: #4d4b45;
+    --accent: #8fb996;
+    --accent-dim: #5c7a61;
+    --meta: #c9a678;
+    --error: #c97878;
+    --font: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  }
 
-        body {
-            font-family: var(--font-mono);
-            background-color: var(--bg-color);
-            color: var(--text-primary);
-            margin: 0;
-            padding: 40px 20px 180px 20px; /* Місце для полів знизу */
-            display: flex;
-            justify-content: center;
-        }
+  * { box-sizing: border-box; }
 
-        .wrapper {
-            width: 100%;
-            max-width: 1200px;
-        }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 64px 24px 80px;
+    display: flex;
+    justify-content: center;
+    line-height: 1.5;
+  }
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 24px;
-        }
+  .wrapper { width: 100%; max-width: 1040px; }
 
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 16px;
-            overflow: hidden;
-            cursor: pointer;
-            position: relative;
-            aspect-ratio: 16 / 10;
-            border: 1px solid var(--border-color);
-            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), 
-                        border-color 0.3s, 
-                        box-shadow 0.3s;
-        }
+  header {
+    margin-bottom: 40px;
+  }
 
-        .card:hover {
-            transform: translateY(-8px);
-            border-color: var(--accent-color);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
-        }
+  .path {
+    font-size: 12px;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+    margin-bottom: 18px;
+  }
 
-        .thumbnail-box {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
+  .input-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+    transition: border-color 0.2s ease;
+  }
 
-        .thumbnail-box img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            filter: brightness(65%) grayscale(20%);
-            transition: filter 0.3s;
-        }
+  .input-line:focus-within { border-color: var(--accent-dim); }
 
-        .card:hover .thumbnail-box img {
-            filter: brightness(80%) grayscale(0%);
-        }
+  .prompt-glyph { color: var(--accent); font-size: 15px; flex-shrink: 0; }
 
-        .scrim {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0.6) 100%);
-            z-index: 1;
-        }
+  #channelUrl {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    caret-color: var(--accent);
+  }
 
-        .video-title {
-            position: absolute;
-            bottom: 16px;
-            left: 16px;
-            right: 16px;
-            font-size: 0.8rem;
-            font-weight: normal;
-            margin: 0;
-            z-index: 2;
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
+  #channelUrl::placeholder { color: var(--text-faint); }
 
-        .video-date {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            font-size: 0.7rem;
-            color: var(--accent-color);
-            z-index: 2;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 3px 8px;
-            border-radius: 4px;
-        }
+  .echo {
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 16px;
+  }
 
-        .copy-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(15, 15, 15, 0.95);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.8rem;
-            color: var(--success-color);
-            opacity: 0;
-            z-index: 3;
-            transition: opacity 0.2s;
-            text-align: center;
-        }
+  .echo .flag { color: var(--meta); }
+  .echo.err { color: var(--error); }
 
-        .card.copied .copy-overlay {
-            opacity: 1;
-        }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+  }
 
-        /* Нижня панель керування */
-        .controls-panel {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: calc(100% - 40px);
-            max-width: 500px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
+  .card {
+    background: var(--bg);
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    cursor: pointer;
+  }
 
-        .controls-panel input[type="text"] {
-            width: 100%;
-            background-color: transparent;
-            border: none;
-            border-bottom: 1px solid #333;
-            color: var(--text-primary);
-            padding: 10px 0;
-            font-size: 0.85rem;
-            font-family: var(--font-mono);
-            outline: none;
-            text-align: center;
-            transition: border-bottom-color 0.3s;
-        }
+  .thumb-box {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--surface);
+  }
 
-        .controls-panel input[type="text"]:focus {
-            border-bottom-color: var(--accent-color);
-        }
+  .thumb-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: grayscale(45%) brightness(0.8) contrast(1.02);
+    transition: filter 0.25s ease, transform 0.4s ease;
+    display: block;
+  }
 
-        .placeholder-text {
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            margin-top: 100px;
-            line-height: 1.8;
-            width: 100%;
-            grid-column: 1 / -1;
-        }
-    </style>
+  .card:hover .thumb-box img {
+    filter: grayscale(0%) brightness(0.95);
+    transform: scale(1.03);
+  }
+
+  .date-tag {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 10.5px;
+    color: var(--meta);
+    background: rgba(10, 10, 10, 0.75);
+    padding: 3px 7px;
+    letter-spacing: 0.02em;
+  }
+
+  .card-body {
+    padding: 14px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .card:hover .card-body { border-color: var(--border-hover); }
+
+  .video-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.5;
+  }
+
+  .prefix { color: var(--accent-dim); margin-right: 6px; }
+
+  .copy-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .card.copied .copy-flash { opacity: 1; }
+
+  .placeholder {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 13px;
+    padding: 80px 20px;
+    background: var(--bg);
+  }
+
+  @media (max-width: 480px) {
+    body { padding: 40px 16px 60px; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
 
-    <div class="wrapper">
-        <div class="grid" id="videoGrid">
-            <div class="placeholder-text" id="placeholder">
-                [ введіть ваш API Key та вставте url каналу в поля знизу ]
-            </div>
+<div class="wrapper">
+  <header>
+    <div class="path">~/channel</div>
+    <div class="input-line">
+      <span class="prompt-glyph">&gt;</span>
+      <input type="text" id="channelUrl" placeholder="@handle or youtube.com/@channel" autocomplete="off" autofocus>
+    </div>
+    <div class="echo" id="echo"></div>
+  </header>
+
+  <div class="grid" id="videoGrid">
+    <div class="placeholder">waiting for input</div>
+  </div>
+</div>
+
+<script>
+  // Point this at your own deployed proxy endpoint (see functions/api/videos.js).
+  // No API key lives in this file — the key stays server-side.
+  const API_ENDPOINT = "/api/videos";
+
+  const inputField = document.getElementById('channelUrl');
+  const grid = document.getElementById('videoGrid');
+  const echo = document.getElementById('echo');
+  let debounceTimer;
+
+  inputField.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const val = inputField.value.trim();
+
+    if (val.length === 0) {
+      grid.innerHTML = '<div class="placeholder">waiting for input</div>';
+      echo.textContent = '';
+      return;
+    }
+
+    debounceTimer = setTimeout(() => fetchVideos(val), 500);
+  });
+
+  async function fetchVideos(rawInput) {
+    echo.className = 'echo';
+    echo.innerHTML = `<span class="flag">$</span> fetch --channel="${escapeHtml(rawInput)}" --limit=6`;
+    grid.innerHTML = '<div class="placeholder">fetching…</div>';
+
+    try {
+      const res = await fetch(`${API_ENDPOINT}?channel=${encodeURIComponent(rawInput)}`);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'request failed');
+      if (!data.videos || data.videos.length === 0) throw new Error('no videos found');
+
+      renderVideos(data.videos);
+      echo.innerHTML += `<br><span class="flag">✓</span> ${data.videos.length} results`;
+    } catch (err) {
+      grid.innerHTML = `<div class="placeholder">${escapeHtml(err.message)}</div>`;
+      echo.className = 'echo err';
+      echo.innerHTML += `<br>error: ${escapeHtml(err.message)}`;
+    }
+  }
+
+  function renderVideos(videos) {
+    grid.innerHTML = '';
+    videos.forEach(video => {
+      const url = `https://www.youtube.com/watch?v=${video.id}`;
+      const card = document.createElement('a');
+      card.className = 'card';
+      card.href = url;
+      card.target = '_blank';
+      card.rel = 'noopener';
+
+      card.innerHTML = `
+        <div class="thumb-box">
+          <img src="${video.thumbnail}" alt="${escapeHtml(video.title)}" loading="lazy">
+          <span class="date-tag">${escapeHtml(video.date)}</span>
         </div>
-    </div>
+        <div class="card-body">
+          <p class="video-title"><span class="prefix">&gt;</span>${escapeHtml(video.title)}</p>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
 
-    <!-- Нижня панель із полями вводу -->
-    <div class="controls-panel">
-        <input type="text" id="apiKey" placeholder="____________________ вставте сюди API KEY ____________________" autocomplete="off">
-        <input type="text" id="channelUrl" placeholder="__________________ вставте url каналу або @юзернейм __________________" autocomplete="off">
-    </div>
-
-    <script>
-        const apiKeyField = document.getElementById('apiKey');
-        const inputField = document.getElementById('channelUrl');
-        const grid = document.getElementById('videoGrid');
-        let debounceTimer;
-
-        // Зберігаємо API-ключ у браузері, щоб не вводити його щоразу
-        if (localStorage.getItem('yt_api_key')) {
-            apiKeyField.value = localStorage.getItem('yt_api_key');
-        }
-
-        apiKeyField.addEventListener('input', () => {
-            localStorage.setItem('yt_api_key', apiKeyField.value.trim());
-        });
-
-        inputField.addEventListener('input', () => {
-            clearTimeout(debounceTimer);
-            const val = inputField.value.trim();
-            const key = apiKeyField.value.trim();
-            
-            if (!key) {
-                grid.innerHTML = '<div class="placeholder-text" style="color: var(--accent-color)">[ ПОМИЛКА: Будь ласка, вставте спочатку ваш Google API Key ]</div>';
-                return;
-            }
-
-            if (val.length === 0) {
-                grid.innerHTML = '<div class="placeholder-text">[ вставте url каналу або @юзернейм ]</div>';
-                return;
-            }
-
-            grid.innerHTML = '<div class="placeholder-text">[ ОЧІКУВАННЯ ЗАВЕРШЕННЯ ВВОДУ... ]</div>';
-            
-            debounceTimer = setTimeout(() => {
-                fetchVideosFromAPI(val, key);
-            }, 500);
-        });
-
-        // Аналіз типу вводу (чи це посилання, @юзернейм чи прямий ID)
-        function parseInput(input) {
-            let clean = input.trim();
-            
-            // Якщо посилання з редиректу Google
-            try {
-                if (clean.includes('google.com')) {
-                    const urlObj = new URL(clean);
-                    const realUrl = urlObj.searchParams.get('url') || urlObj.searchParams.get('q');
-                    if (realUrl) clean = realUrl;
-                }
-            } catch (e) {}
-
-            const handleMatch = clean.match(/(@[a-zA-Z0-9._-]+)/);
-            if (handleMatch) return { type: 'handle', value: handleMatch[1] };
-
-            const idMatch = clean.match(/(UC[a-zA-Z0-9_-]{22})/);
-            if (idMatch) return { type: 'id', value: idMatch[1] };
-
-            // Спроба знайти просто назву або юзернейм
-            if (clean.startsWith('http')) {
-                const parts = clean.split('/');
-                const lastPart = parts[parts.length - 1] || parts[parts.length - 2];
-                if (lastPart.startsWith('@')) return { type: 'handle', value: lastPart };
-                return { type: 'handle', value: '@' + lastPart };
-            }
-
-            return { type: 'handle', value: clean.startsWith('@') ? clean : '@' + clean };
-        }
-
-        async function fetchVideosFromAPI(input, key) {
-            const parsed = parseInput(input);
-            grid.innerHTML = '<div class="placeholder-text">[ КРОК 1: ОТРИМАННЯ ДАНИХ КАНАЛУ... ]</div>';
-
-            try {
-                let channelQueryUrl = '';
-                if (parsed.type === 'handle') {
-                    channelQueryUrl = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&forHandle=${encodeURIComponent(parsed.value)}&key=${key}`;
-                } else if (parsed.type === 'id') {
-                    channelQueryUrl = `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${encodeURIComponent(parsed.value)}&key=${key}`;
-                } else {
-                    throw new Error("Нерозпізнаний формат вводу. Введіть @username або посилання.");
-                }
-
-                const channelRes = await fetch(channelQueryUrl);
-                const channelData = await channelRes.json();
-
-                if (channelData.error) {
-                    throw new Error(channelData.error.message);
-                }
-
-                if (!channelData.items || channelData.items.length === 0) {
-                    throw new Error("Канал не знайдено. Перевірте правильність імені.");
-                }
-
-                // Кожен канал на YouTube має системний плейлист "uploads", де зберігаються всі завантаження
-                const uploadsPlaylistId = channelData.items[0].contentDetails.relatedPlaylists.uploads;
-
-                grid.innerHTML = '<div class="placeholder-text">[ КРОК 2: ОТРИМАННЯ ОСТАННІХ ВІДЕО... ]</div>';
-
-                // Запит на отримання останніх 6 елементів із плейлиста "uploads"
-                const playlistQueryUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=6&key=${key}`;
-                const playlistRes = await fetch(playlistQueryUrl);
-                const playlistData = await playlistRes.json();
-
-                if (playlistData.error) {
-                    throw new Error(playlistData.error.message);
-                }
-
-                const items = playlistData.items || [];
-                if (items.length === 0) {
-                    throw new Error("На каналі немає опублікованих відео.");
-                }
-
-                const videos = items.map(item => {
-                    const videoId = item.snippet.resourceId.videoId;
-                    return {
-                        id: videoId,
-                        title: `> ${item.snippet.title}`,
-                        thumbnail: item.snippet.thumbnails?.medium?.url || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-                        date: `[ ${formatDate(item.snippet.publishedAt)} ]`
-                    };
-                });
-
-                renderVideos(videos);
-
-            } catch (err) {
-                grid.innerHTML = `<div class="placeholder-text" style="color: var(--accent-color)">[ API ERROR: ${err.message} ]</div>`;
-            }
-        }
-
-        function formatDate(isoString) {
-            if (!isoString) return "unknown";
-            const date = new Date(isoString);
-            return date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' });
-        }
-
-        function renderVideos(videos) {
-            grid.innerHTML = '';
-
-            videos.forEach(video => {
-                const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.onclick = () => copyToClipboard(videoUrl, card);
-
-                card.innerHTML = `
-                    <div class="copy-overlay">
-                        +----------------------+<br>
-                        |    [ COPIED URL ]    |<br>
-                        +----------------------+
-                    </div>
-                    <div class="thumbnail-box">
-                        <img src="${video.thumbnail}" alt="${video.title}">
-                        <div class="scrim"></div>
-                    </div>
-                    <div class="video-date">${video.date}</div>
-                    <h3 class="video-title">${video.title}</h3>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        function copyToClipboard(url, cardElement) {
-            navigator.clipboard.writeText(url).then(() => {
-                cardElement.classList.add('copied');
-                setTimeout(() => {
-                    cardElement.classList.remove('copied');
-                }, 1000);
-            }).catch(err => {
-                console.error('Помилка копіювання: ', err);
-            });
-        }
-    </script>
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
 </body>
 </html>

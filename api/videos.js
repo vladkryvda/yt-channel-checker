@@ -9,9 +9,13 @@ export default async function handler(req, res) {
   if (!key) return res.status(500).json({ error: "YOUTUBE_API_KEY is not configured on the server" });
 
   const raw = (req.query.channel || "").toString().trim();
+  const pageToken = (req.query.pageToken || "").toString().trim();
   if (!raw) return res.status(400).json({ error: "missing ?channel= param" });
 
   try {
+    // The uploads-playlist lookup only needs to happen once per channel, but
+    // since this function is stateless we just repeat it on every page —
+    // it's a single cheap API call either way.
     const parsed = parseInput(raw);
 
     const channelUrl =
@@ -26,7 +30,11 @@ export default async function handler(req, res) {
 
     const uploadsPlaylistId = channelData.items[0].contentDetails.relatedPlaylists.uploads;
 
-    const playlistUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=6&key=${key}`;
+    // The "uploads" playlist is always ordered newest → oldest by YouTube,
+    // so paging through it with pageToken preserves chronological order.
+    let playlistUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=6&key=${key}`;
+    if (pageToken) playlistUrl += `&pageToken=${encodeURIComponent(pageToken)}`;
+
     const playlistRes = await fetch(playlistUrl);
     const playlistData = await playlistRes.json();
     if (playlistData.error) throw new Error(playlistData.error.message);
@@ -41,7 +49,7 @@ export default async function handler(req, res) {
       };
     });
 
-    res.status(200).json({ videos });
+    res.status(200).json({ videos, nextPageToken: playlistData.nextPageToken || null });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

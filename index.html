@@ -6,18 +6,19 @@
 <title>latest uploads</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f4ef;
-    --surface: #ffffff;
-    --border: #e4e0d6;
-    --border-hover: #cfc9ba;
-    --text: #2b2a26;
-    --text-dim: #8a8676;
-    --text-faint: #b6b1a2;
-    --accent: #6b7f5e;
-    --error: #b56a5a;
+    --bg: #F4EFE6;
+    --surface: #FBF8F1;
+    --border: #E6DCC9;
+    --border-hover: #D6C6A8;
+    --text: #3B362B;
+    --text-dim: #8C8371;
+    --text-faint: #B8AD97;
+    --accent: #BC6C4A;
+    --accent-soft: #E7D9C6;
+    --error: #A75C48;
     --font: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
   }
 
@@ -28,21 +29,23 @@
     background: var(--bg);
     color: var(--text);
     margin: 0;
-    padding: 56px 24px 80px;
+    padding: 64px 24px 100px;
     display: flex;
     justify-content: center;
     line-height: 1.5;
   }
 
-  .wrapper { width: 100%; max-width: 900px; }
+  .wrapper { width: 100%; max-width: 920px; }
 
   .input-line {
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 12px;
-    margin-bottom: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
     transition: border-color 0.2s ease;
   }
 
@@ -65,44 +68,52 @@
     font-size: 12.5px;
     color: var(--text-dim);
     min-height: 18px;
-    margin-bottom: 32px;
+    margin: 10px 4px 32px;
   }
 
   .status.err { color: var(--error); }
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 24px;
   }
 
   .card {
     cursor: pointer;
     position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 10px;
+    transition: border-color 0.2s ease, transform 0.15s ease;
+  }
+
+  .card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
   }
 
   .thumb-box {
     position: relative;
     aspect-ratio: 16 / 9;
     overflow: hidden;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: 12px;
+    background: var(--accent-soft);
   }
 
   .thumb-box img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.3s ease;
+    transition: transform 0.35s ease;
     display: block;
   }
 
-  .card:hover .thumb-box { border-color: var(--border-hover); }
-  .card:hover .thumb-box img { transform: scale(1.02); }
+  .card:hover .thumb-box img { transform: scale(1.03); }
 
   .card-body {
-    padding: 10px 2px 0;
+    padding: 12px 6px 4px;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -130,9 +141,10 @@
 
   .copy-flash {
     position: absolute;
-    inset: 0;
-    border-radius: 6px;
-    background: rgba(246, 244, 239, 0.94);
+    inset: 10px 10px auto 10px;
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    background: rgba(251, 248, 241, 0.95);
     border: 1px solid var(--accent);
     display: flex;
     align-items: center;
@@ -154,8 +166,36 @@
     padding: 60px 20px;
   }
 
+  .load-more-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 36px;
+  }
+
+  #loadMoreBtn {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 24px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  #loadMoreBtn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  #loadMoreBtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
   @media (max-width: 480px) {
-    body { padding: 36px 16px 60px; }
+    body { padding: 40px 16px 70px; }
     .grid { grid-template-columns: 1fr; }
   }
 </style>
@@ -171,6 +211,10 @@
   <div class="grid" id="videoGrid">
     <div class="placeholder">введіть канал вище</div>
   </div>
+
+  <div class="load-more-row" id="loadMoreRow" style="display:none;">
+    <button id="loadMoreBtn">більше</button>
+  </div>
 </div>
 
 <script>
@@ -179,45 +223,85 @@
   const inputField = document.getElementById('channelUrl');
   const grid = document.getElementById('videoGrid');
   const status = document.getElementById('status');
+  const loadMoreRow = document.getElementById('loadMoreRow');
+  const loadMoreBtn = document.getElementById('loadMoreBtn');
+
   let debounceTimer;
+  let currentChannelInput = null;
+  let nextPageToken = null;
+  let totalLoaded = 0;
 
   inputField.addEventListener('input', () => {
     clearTimeout(debounceTimer);
     const val = inputField.value.trim();
 
     if (val.length === 0) {
+      resetState();
       grid.innerHTML = '<div class="placeholder">введіть канал вище</div>';
-      status.textContent = '';
-      status.className = 'status';
       return;
     }
 
-    debounceTimer = setTimeout(() => fetchVideos(val), 500);
+    debounceTimer = setTimeout(() => startSearch(val), 500);
   });
 
-  async function fetchVideos(rawInput) {
+  loadMoreBtn.addEventListener('click', () => {
+    if (currentChannelInput && nextPageToken) {
+      fetchVideos(currentChannelInput, nextPageToken, true);
+    }
+  });
+
+  function resetState() {
+    currentChannelInput = null;
+    nextPageToken = null;
+    totalLoaded = 0;
+    loadMoreRow.style.display = 'none';
+    status.textContent = '';
+    status.className = 'status';
+  }
+
+  function startSearch(val) {
+    currentChannelInput = val;
+    nextPageToken = null;
+    totalLoaded = 0;
+    fetchVideos(val, null, false);
+  }
+
+  async function fetchVideos(rawInput, pageToken, append) {
     status.className = 'status';
     status.textContent = 'завантаження…';
-    grid.innerHTML = '';
+    if (!append) grid.innerHTML = '';
+    loadMoreBtn.disabled = true;
 
     try {
-      const res = await fetch(`${API_ENDPOINT}?channel=${encodeURIComponent(rawInput)}`);
+      let url = `${API_ENDPOINT}?channel=${encodeURIComponent(rawInput)}`;
+      if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+      const res = await fetch(url);
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'помилка запиту');
-      if (!data.videos || data.videos.length === 0) throw new Error('відео не знайдено');
+      if (!data.videos || data.videos.length === 0) {
+        if (!append) throw new Error('відео не знайдено');
+      } else {
+        renderVideos(data.videos, append);
+        totalLoaded += data.videos.length;
+      }
 
-      renderVideos(data.videos);
-      status.textContent = `${data.videos.length} відео · клік копіює посилання`;
+      nextPageToken = data.nextPageToken || null;
+      loadMoreRow.style.display = nextPageToken ? 'flex' : 'none';
+      loadMoreBtn.disabled = false;
+
+      status.textContent = `${totalLoaded} відео · клік копіює посилання`;
     } catch (err) {
-      grid.innerHTML = '';
+      if (!append) grid.innerHTML = '';
       status.className = 'status err';
       status.textContent = err.message;
+      loadMoreBtn.disabled = false;
     }
   }
 
-  function renderVideos(videos) {
-    grid.innerHTML = '';
+  function renderVideos(videos, append) {
+    if (!append) grid.innerHTML = '';
     videos.forEach(video => {
       const url = `https://www.youtube.com/watch?v=${video.id}`;
       const card = document.createElement('div');

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -116,7 +116,7 @@
     padding: 12px 6px 4px;
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: flex-start; /* Змінено для правильного позиціонування багаторядкової дати */
     gap: 12px;
   }
 
@@ -132,11 +132,25 @@
     line-height: 1.45;
   }
 
+  /* Обгортка для дати та відносного часу */
+  .date-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+
   .video-date {
     font-size: 11.5px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .video-time-ago {
+    font-size: 10px; /* Зменшений текст */
     color: var(--text-faint);
     white-space: nowrap;
-    flex-shrink: 0;
+    margin-top: 2px;
   }
 
   .copy-flash {
@@ -172,14 +186,17 @@
     margin-top: 36px;
   }
 
+  /* Мінімалістична кругла кнопка з шевроном */
   #loadMoreBtn {
-    font-family: var(--font);
-    font-size: 13px;
-    color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 10px 24px;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
     cursor: pointer;
     transition: border-color 0.2s ease, color 0.2s ease;
   }
@@ -204,16 +221,21 @@
 
 <div class="wrapper">
   <div class="input-line">
-    <input type="text" id="channelUrl" placeholder="@handle або посилання на канал" autocomplete="off" autofocus>
+    <input type="text" id="channelUrl" placeholder="@handle or channel link" autocomplete="off" autofocus>
   </div>
   <div class="status" id="status"></div>
 
   <div class="grid" id="videoGrid">
-    <div class="placeholder">введіть канал вище</div>
+    <div class="placeholder">enter channel above</div>
   </div>
 
   <div class="load-more-row" id="loadMoreRow" style="display:none;">
-    <button id="loadMoreBtn">більше</button>
+    <button id="loadMoreBtn" title="Load more">
+      <!-- Мінімалістична іконка стрілочки вниз -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -237,7 +259,7 @@
 
     if (val.length === 0) {
       resetState();
-      grid.innerHTML = '<div class="placeholder">введіть канал вище</div>';
+      grid.innerHTML = '<div class="placeholder">enter channel above</div>';
       return;
     }
 
@@ -268,7 +290,7 @@
 
   async function fetchVideos(rawInput, pageToken, append) {
     status.className = 'status';
-    status.textContent = 'завантаження…';
+    status.textContent = 'loading…';
     if (!append) grid.innerHTML = '';
     loadMoreBtn.disabled = true;
 
@@ -279,9 +301,9 @@
       const res = await fetch(url);
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data.error || 'помилка запиту');
+      if (!res.ok) throw new Error(data.error || 'request error');
       if (!data.videos || data.videos.length === 0) {
-        if (!append) throw new Error('відео не знайдено');
+        if (!append) throw new Error('no videos found');
       } else {
         renderVideos(data.videos, append);
         totalLoaded += data.videos.length;
@@ -291,7 +313,7 @@
       loadMoreRow.style.display = nextPageToken ? 'flex' : 'none';
       loadMoreBtn.disabled = false;
 
-      status.textContent = `${totalLoaded} відео · клік копіює посилання`;
+      status.textContent = `${totalLoaded} videos · click copies link`;
     } catch (err) {
       if (!append) grid.innerHTML = '';
       status.className = 'status err';
@@ -303,24 +325,56 @@
   function renderVideos(videos, append) {
     if (!append) grid.innerHTML = '';
     videos.forEach(video => {
-      const url = `https://www.youtube.com/watch?v=${video.id}`;
+      // Виправлено синтаксис та формування лінку
+      const url = `https://youtube.com/watch?v=${video.id}`;
       const card = document.createElement('div');
       card.className = 'card';
 
       card.innerHTML = `
         <div class="thumb-box">
           <img src="${video.thumbnail}" alt="${escapeHtml(video.title)}" loading="lazy">
-          <div class="copy-flash">посилання скопійовано</div>
+          <div class="copy-flash">link copied</div>
         </div>
         <div class="card-body">
           <p class="video-title">${escapeHtml(video.title)}</p>
-          <span class="video-date">${escapeHtml(video.date)}</span>
+          <div class="date-wrapper">
+            <span class="video-date">${escapeHtml(video.date)}</span>
+            <span class="video-time-ago">${timeAgo(video.date)}</span>
+          </div>
         </div>
       `;
 
       card.addEventListener('click', () => copyToClipboard(url, card));
       grid.appendChild(card);
     });
+  }
+
+  // Функція для обчислення часу, як на YouTube
+  function timeAgo(dateString) {
+    const date = new Date(dateString);
+    if (isNaN(date)) return ''; // Якщо дата не розпізнана
+    
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " year ago" : " years ago");
+    
+    interval = seconds / 2592000;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " month ago" : " months ago");
+    
+    interval = seconds / 604800;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " week ago" : " weeks ago");
+    
+    interval = seconds / 86400;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " day ago" : " days ago");
+    
+    interval = seconds / 3600;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " hour ago" : " hours ago");
+    
+    interval = seconds / 60;
+    if (Math.floor(interval) >= 1) return Math.floor(interval) + (Math.floor(interval) === 1 ? " minute ago" : " minutes ago");
+    
+    return Math.floor(seconds) + (Math.floor(seconds) === 1 ? " second ago" : " seconds ago");
   }
 
   function copyToClipboard(url, card) {

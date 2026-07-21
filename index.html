@@ -41,7 +41,6 @@
 
   .wrapper { width: 100%; max-width: 920px; }
 
-  /* Minimalist Header */
   .header {
     margin-bottom: 24px;
     display: flex;
@@ -57,7 +56,6 @@
     color: var(--text);
   }
 
-  /* Sleek Unified Search Bar */
   .search-box {
     display: flex;
     align-items: center;
@@ -127,7 +125,6 @@
   .search-btn:hover { background: var(--accent-hover); }
   .search-btn:active { transform: scale(0.98); }
 
-  /* Status Line */
   .status {
     font-size: 12px;
     color: var(--text-dim);
@@ -137,7 +134,6 @@
 
   .status.err { color: var(--error); }
 
-  /* Video Grid Layout */
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -244,7 +240,6 @@
 
   .card.copied .copy-flash { opacity: 1; }
 
-  /* Skeletons */
   .skeleton-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -309,10 +304,7 @@
     transform: translateY(-1px);
   }
 
-  #loadMoreBtn:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
+  #loadMoreBtn:disabled { opacity: 0.45; cursor: default; }
 
   @media (max-width: 480px) {
     body { padding: 40px 16px 70px; }
@@ -327,7 +319,6 @@
     <h1 class="title">latest uploads</h1>
   </header>
 
-  <!-- Search Input Container -->
   <div class="search-box">
     <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
     <input type="text" id="searchInput" placeholder="Paste link, @handle, or enter search keywords..." autocomplete="off" autofocus>
@@ -337,12 +328,10 @@
 
   <div class="status" id="status"></div>
 
-  <!-- Video Grid Container -->
   <div class="grid" id="videoGrid">
     <div class="placeholder">enter search terms, channel link or @handle above</div>
   </div>
 
-  <!-- Load More Button -->
   <div class="load-more-row" id="loadMoreRow" style="display:none;">
     <button id="loadMoreBtn" title="Load more">
       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -365,11 +354,30 @@
 
   let debounceTimer = null;
   let activeQuery = '';
-  let activeIsChannel = false;
   let nextPageToken = null;
   let totalLoaded = 0;
 
-  // Detects if string is a URL, channel ID, or @handle
+  // Очищення та витягування ID чи handle із посилання
+  function sanitizeInput(input) {
+    if (!input) return '';
+    let str = input.trim();
+
+    // 1. Посилання на відео -> витягуємо ID
+    const videoMatch = str.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})/);
+    if (videoMatch) return videoMatch[1];
+
+    // 2. Посилання на канал -> витягуємо Channel ID
+    const channelMatch = str.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/);
+    if (channelMatch) return channelMatch[1];
+
+    // 3. Посилання на хендл -> витягуємо @handle
+    const handleMatch = str.match(/(?:youtube\.com\/)?@([a-zA-Z0-9_.-]+)/);
+    if (handleMatch) return '@' + handleMatch[1];
+
+    return str;
+  }
+
+  // Перевірка, чи є введений текст посиланням або хендлом
   function isLinkOrHandle(str) {
     const val = str.trim();
     if (!val) return false;
@@ -380,48 +388,41 @@
     return false;
   }
 
-  // Handle Input Changes
   searchInput.addEventListener('input', () => {
-    const val = searchInput.value.trim();
-    clearBtn.style.display = val.length > 0 ? 'flex' : 'none';
+    const rawVal = searchInput.value.trim();
+    clearBtn.style.display = rawVal.length > 0 ? 'flex' : 'none';
 
-    if (val.length === 0) {
+    if (rawVal.length === 0) {
       clearTimeout(debounceTimer);
       resetState();
       grid.innerHTML = '<div class="placeholder">enter search terms, channel link or @handle above</div>';
       return;
     }
 
-    const isLink = isLinkOrHandle(val);
-
-    if (isLink) {
-      // Auto-trigger for links or @handles without needing to click Search button
+    if (isLinkOrHandle(rawVal)) {
       clearTimeout(debounceTimer);
       status.className = 'status';
       status.textContent = 'link or @handle detected — searching...';
       debounceTimer = setTimeout(() => {
-        startSearch(val, true);
+        startSearch(rawVal);
       }, 400);
     } else {
-      // For keyword search, clear any auto-timers (requires Search click or Enter)
       clearTimeout(debounceTimer);
       status.className = 'status';
       status.textContent = 'press Enter or click Search';
     }
   });
 
-  // Handle Paste Event (Instant auto-detection on paste)
   searchInput.addEventListener('paste', () => {
     setTimeout(() => {
-      const val = searchInput.value.trim();
-      if (isLinkOrHandle(val)) {
+      const rawVal = searchInput.value.trim();
+      if (isLinkOrHandle(rawVal)) {
         clearTimeout(debounceTimer);
-        startSearch(val, true);
+        startSearch(rawVal);
       }
     }, 50);
   });
 
-  // Clear button click
   clearBtn.addEventListener('click', () => {
     searchInput.value = '';
     clearBtn.style.display = 'none';
@@ -431,16 +432,12 @@
     searchInput.focus();
   });
 
-  // Manual Trigger via Button or Enter Key
   searchBtn.addEventListener('click', () => submitManualSearch());
 
   searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      submitManualSearch();
-    }
+    if (e.key === 'Enter') submitManualSearch();
   });
 
-  // Shortcut key: Cmd+K or Ctrl+K or '/' to focus search input
   window.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
@@ -450,20 +447,19 @@
 
   loadMoreBtn.addEventListener('click', () => {
     if (activeQuery && nextPageToken) {
-      fetchVideos(activeQuery, activeIsChannel, nextPageToken, true);
+      fetchVideos(activeQuery, nextPageToken, true);
     }
   });
 
   function submitManualSearch() {
-    const val = searchInput.value.trim();
-    if (!val) return;
+    const rawVal = searchInput.value.trim();
+    if (!rawVal) return;
     clearTimeout(debounceTimer);
-    startSearch(val, isLinkOrHandle(val));
+    startSearch(rawVal);
   }
 
   function resetState() {
     activeQuery = '';
-    activeIsChannel = false;
     nextPageToken = null;
     totalLoaded = 0;
     loadMoreRow.style.display = 'none';
@@ -471,15 +467,14 @@
     status.className = 'status';
   }
 
-  function startSearch(query, isChannel) {
-    activeQuery = query;
-    activeIsChannel = isChannel;
+  function startSearch(rawQuery) {
+    activeQuery = rawQuery;
     nextPageToken = null;
     totalLoaded = 0;
-    fetchVideos(query, isChannel, null, false);
+    fetchVideos(rawQuery, null, false);
   }
 
-  async function fetchVideos(rawInput, isChannel, pageToken, append) {
+  async function fetchVideos(rawInput, pageToken, append) {
     status.className = 'status';
     status.textContent = 'loading…';
     
@@ -487,15 +482,24 @@
     loadMoreBtn.disabled = true;
 
     try {
-      // Backend request with auto-detected channel or keyword search parameter
-      const paramName = isChannel ? 'channel' : 'q';
-      let url = `${API_ENDPOINT}?${paramName}=${encodeURIComponent(rawInput)}`;
+      const cleanedQuery = sanitizeInput(rawInput);
+
+      // ВИПРАВЛЕННЯ ПОМИЛКИ 400: Надсилаємо і channel, і q одночасно
+      let url = `${API_ENDPOINT}?channel=${encodeURIComponent(cleanedQuery)}&q=${encodeURIComponent(cleanedQuery)}`;
       if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
       const res = await fetch(url);
-      const data = await res.json();
+      
+      let data;
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`Server response error (${res.status}). Check backend handler.`);
+      }
 
-      if (!res.ok) throw new Error(data.error || 'Request failed');
+      if (!res.ok) {
+        throw new Error(data.error || `Server error (${res.status})`);
+      }
 
       if (!data.videos || data.videos.length === 0) {
         if (!append) grid.innerHTML = '<div class="placeholder">no videos found</div>';
@@ -522,7 +526,6 @@
     if (!append) grid.innerHTML = '';
 
     videos.forEach(video => {
-      // Constructing clean YouTube URL
       const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
       const card = document.createElement('div');
       card.className = 'card';

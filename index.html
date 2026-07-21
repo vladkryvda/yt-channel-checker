@@ -110,9 +110,9 @@
   .search-btn:hover { background: var(--accent-hover); }
   .search-btn:active { transform: scale(0.98); }
 
-  /* Filter Controls Bar */
+  /* Filter Controls Bar (Hidden by default, shown ONLY for keyword search) */
   .filter-bar {
-    display: flex;
+    display: none; /* Controlled dynamically via JS */
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
@@ -240,7 +240,6 @@
     color: var(--text);
     display: -webkit-box;
     -webkit-line-clamp: 2;
-    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.4;
@@ -367,8 +366,8 @@
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
 
-  <!-- Filters Row -->
-  <div class="filter-bar">
+  <!-- Filters Row (Appears ONLY for regular text searches) -->
+  <div class="filter-bar" id="filterBar">
     <div class="filter-group" id="timeFilterGroup">
       <span class="filter-label">Time:</span>
       <button class="chip active" data-time="all">All time</button>
@@ -408,6 +407,7 @@
   const searchInput = document.getElementById('searchInput');
   const searchBtn = document.getElementById('searchBtn');
   const clearBtn = document.getElementById('clearBtn');
+  const filterBar = document.getElementById('filterBar');
   const grid = document.getElementById('videoGrid');
   const status = document.getElementById('status');
   const loadMoreRow = document.getElementById('loadMoreRow');
@@ -419,11 +419,11 @@
   let debounceTimer = null;
   let activeQuery = '';
   let activeTimeFilter = 'all'; // 'all', 'today', 'week', 'month', 'year'
-  let activeSort = 'date';       // 'date' (Latest) or 'relevance'
+  let activeSort = 'date';       // 'date' or 'relevance'
   let nextPageToken = null;
   let totalLoaded = 0;
 
-  // Cleaning Links & Handles
+  // Sanitizes links, channel IDs, and handles
   function sanitizeInput(input) {
     if (!input) return '';
     let str = input.trim();
@@ -450,18 +450,34 @@
     return false;
   }
 
-  // Calculate RFC 3339 Date string for YouTube API publishedAfter
-  function getPublishedAfterISO(filterKey) {
-    if (!filterKey || filterKey === 'all') return null;
-    const now = new Date();
-    if (filterKey === 'today') now.setDate(now.getDate() - 1);
-    else if (filterKey === 'week') now.setDate(now.getDate() - 7);
-    else if (filterKey === 'month') now.setMonth(now.getMonth() - 1);
-    else if (filterKey === 'year') now.setFullYear(now.getFullYear() - 1);
-    return now.toISOString();
+  // Updates Filter Bar visibility: SHOWN only for text search, HIDDEN for links/@handles
+  function updateFilterVisibility() {
+    const rawVal = searchInput.value.trim();
+    if (rawVal.length === 0 || isLinkOrHandle(rawVal)) {
+      filterBar.style.display = 'none';
+    } else {
+      filterBar.style.display = 'flex';
+    }
   }
 
-  // Filter Chip Interactions
+  // Calculate timestamp cutoff for client-side date filtering fallback
+  function getCutoffTimestamp(filterKey) {
+    if (!filterKey || filterKey === 'all') return 0;
+    const now = Date.now();
+    const MS_PER_DAY = 86400000;
+    if (filterKey === 'today') return now - MS_PER_DAY;
+    if (filterKey === 'week') return now - (7 * MS_PER_DAY);
+    if (filterKey === 'month') return now - (30 * MS_PER_DAY);
+    if (filterKey === 'year') return now - (365 * MS_PER_DAY);
+    return 0;
+  }
+
+  function getPublishedAfterISO(filterKey) {
+    const cutoff = getCutoffTimestamp(filterKey);
+    return cutoff > 0 ? new Date(cutoff).toISOString() : null;
+  }
+
+  // Filter Chip Event Handlers
   timeFilterGroup.addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
@@ -469,7 +485,9 @@
     chip.classList.add('active');
     activeTimeFilter = chip.dataset.time;
 
-    if (activeQuery) startSearch(activeQuery);
+    if (activeQuery && !isLinkOrHandle(activeQuery)) {
+      startSearch(activeQuery);
+    }
   });
 
   sortFilterGroup.addEventListener('click', (e) => {
@@ -479,13 +497,16 @@
     chip.classList.add('active');
     activeSort = chip.dataset.sort;
 
-    if (activeQuery) startSearch(activeQuery);
+    if (activeQuery && !isLinkOrHandle(activeQuery)) {
+      startSearch(activeQuery);
+    }
   });
 
-  // Input listeners
+  // Input Event Listeners
   searchInput.addEventListener('input', () => {
     const rawVal = searchInput.value.trim();
     clearBtn.style.display = rawVal.length > 0 ? 'flex' : 'none';
+    updateFilterVisibility();
 
     if (rawVal.length === 0) {
       clearTimeout(debounceTimer);
@@ -511,6 +532,7 @@
   searchInput.addEventListener('paste', () => {
     setTimeout(() => {
       const rawVal = searchInput.value.trim();
+      updateFilterVisibility();
       if (isLinkOrHandle(rawVal)) {
         clearTimeout(debounceTimer);
         startSearch(rawVal);
@@ -523,6 +545,7 @@
     clearBtn.style.display = 'none';
     clearTimeout(debounceTimer);
     resetState();
+    updateFilterVisibility();
     grid.innerHTML = '<div class="placeholder">enter search terms, channel link or @handle above</div>';
     searchInput.focus();
   });
@@ -566,6 +589,7 @@
     activeQuery = rawQuery;
     nextPageToken = null;
     totalLoaded = 0;
+    updateFilterVisibility();
     fetchVideos(rawQuery, null, false);
   }
 
@@ -577,15 +601,20 @@
     loadMoreBtn.disabled = true;
 
     try {
+      const isLink = isLinkOrHandle(rawInput);
       const cleanedQuery = sanitizeInput(rawInput);
       const publishedAfter = getPublishedAfterISO(activeTimeFilter);
 
-      // Construct API URL with both query parameters, sorting, and time filters
-      let url = `${API_ENDPOINT}?channel=${encodeURIComponent(cleanedQuery)}&q=${encodeURIComponent(cleanedQuery)}&order=${encodeURIComponent(activeSort)}`;
+      let url = `${API_ENDPOINT}?channel=${encodeURIComponent(cleanedQuery)}&q=${encodeURIComponent(cleanedQuery)}`;
       
-      if (publishedAfter) {
-        url += `&publishedAfter=${encodeURIComponent(publishedAfter)}`;
+      // Send filters to server ONLY if it's a keyword search
+      if (!isLink) {
+        url += `&order=${encodeURIComponent(activeSort)}`;
+        if (publishedAfter) {
+          url += `&publishedAfter=${encodeURIComponent(publishedAfter)}`;
+        }
       }
+
       if (pageToken) {
         url += `&pageToken=${encodeURIComponent(pageToken)}`;
       }
@@ -603,12 +632,30 @@
         throw new Error(data.error || `Server error (${res.status})`);
       }
 
-      if (!data.videos || data.videos.length === 0) {
+      let videos = data.videos || [];
+
+      // CLIENT-SIDE FILTER & SORT FALLBACK
+      // Ensures time filtering works 100% even if backend proxy ignores publishedAfter parameter
+      if (!isLink && videos.length > 0) {
+        const cutoff = getCutoffTimestamp(activeTimeFilter);
+        if (cutoff > 0) {
+          videos = videos.filter(v => {
+            const t = new Date(v.date).getTime();
+            return !isNaN(t) && t >= cutoff;
+          });
+        }
+
+        if (activeSort === 'date') {
+          videos.sort((a, b) => new Date(b.date) - new Date(a.date));
+        }
+      }
+
+      if (videos.length === 0) {
         if (!append) grid.innerHTML = '<div class="placeholder">no videos found for this filter</div>';
         status.textContent = 'no videos found';
       } else {
-        renderVideos(data.videos, append);
-        totalLoaded += data.videos.length;
+        renderVideos(videos, append);
+        totalLoaded += videos.length;
         status.textContent = `${totalLoaded} videos · click card to copy link`;
       }
 
@@ -699,6 +746,9 @@
     div.textContent = str;
     return div.innerHTML;
   }
+
+  // Initial check
+  updateFilterVisibility();
 </script>
 </body>
 </html>

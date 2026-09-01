@@ -110,7 +110,7 @@
   .search-btn:hover { background: var(--accent-hover); }
   .search-btn:active { transform: scale(0.98); }
 
-  /* Filter Controls Bar (Hidden for links/@handles, visible for normal search) */
+  /* Filter Controls Bar */
   .filter-bar {
     display: none;
     flex-wrap: wrap;
@@ -222,6 +222,20 @@
     color: #FFF;
     font-size: 10px;
     padding: 2px 5px;
+    border-radius: 4px;
+    backdrop-filter: blur(2px);
+  }
+
+  /* Порядковий номер у плейлисті */
+  .playlist-index {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: rgba(196, 89, 60, 0.9);
+    color: #FFF;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
     border-radius: 4px;
     backdrop-filter: blur(2px);
   }
@@ -362,7 +376,7 @@
   <!-- Search Field -->
   <div class="search-box">
     <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    <input type="text" id="searchInput" placeholder="Paste link, @handle, or enter search keywords..." autocomplete="off" autofocus>
+    <input type="text" id="searchInput" placeholder="Paste link, playlist, @handle, or enter keywords..." autocomplete="off" autofocus>
     <button id="clearBtn" class="clear-btn" style="display:none;" title="Clear input">&times;</button>
     <button id="searchBtn" class="search-btn">Search</button>
   </div>
@@ -389,7 +403,7 @@
 
   <!-- Video Grid Container -->
   <div class="grid" id="videoGrid">
-    <div class="placeholder">enter search terms, channel link or @handle above</div>
+    <div class="placeholder">enter search terms, playlist, channel link or @handle above</div>
   </div>
 
   <!-- Load More Button -->
@@ -419,39 +433,50 @@
 
   let debounceTimer = null;
   let activeQuery = '';
-  let activeTimeFilter = 'all';     // Default: All time
-  let activeSort = 'relevance';     // Default: Relevance (Matches Youtube.com native search)
+  let activeTimeFilter = 'all';     
+  let activeSort = 'relevance';     
   let nextPageToken = null;
   let totalLoaded = 0;
 
-  // Sanitizes links, channel IDs, and handles
-  function sanitizeInput(input) {
-    if (!input) return '';
+  // Аналізує та розпізнає введений текст (Плейлист / Відео / Канал / Хендл / Ключове слово)
+  function parseInput(input) {
+    if (!input) return { type: 'query', value: '' };
     let str = input.trim();
 
+    // 1. Посилання на Плейлист або ID плейлиста
+    const playlistMatch = str.match(/[?&]list=([a-zA-Z0-9_-]+)/) || str.match(/^(PL[a-zA-Z0-9_-]+|UU[a-zA-Z0-9_-]+|LL[a-zA-Z0-9_-]+|RD[a-zA-Z0-9_-]+)$/i);
+    if (playlistMatch) {
+      return { type: 'playlist', value: playlistMatch[1] };
+    }
+
+    // 2. Окреме відео
     const videoMatch = str.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([a-zA-Z0-9_-]{11})/);
-    if (videoMatch) return videoMatch[1];
+    if (videoMatch) {
+      return { type: 'video', value: videoMatch[1] };
+    }
 
+    // 3. Канал
     const channelMatch = str.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})/);
-    if (channelMatch) return channelMatch[1];
+    if (channelMatch) {
+      return { type: 'channel', value: channelMatch[1] };
+    }
 
+    // 4. @handle
     const handleMatch = str.match(/(?:youtube\.com\/)?@([a-zA-Z0-9_.-]+)/);
-    if (handleMatch) return '@' + handleMatch[1];
+    if (handleMatch) {
+      return { type: 'handle', value: '@' + handleMatch[1] };
+    }
 
-    return str;
+    // 5. Звичайні ключові слова
+    return { type: 'query', value: str };
   }
 
   function isLinkOrHandle(str) {
-    const val = str.trim();
-    if (!val) return false;
-    if (val.startsWith('@')) return true;
-    if (val.includes('youtube.com') || val.includes('youtu.be')) return true;
-    if (val.startsWith('http://') || val.startsWith('https://')) return true;
-    if (val.startsWith('UC') && val.length === 24) return true;
-    return false;
+    const parsed = parseInput(str);
+    return parsed.type !== 'query';
   }
 
-  // Show filter bar ONLY for normal keyword searches
+  // Приховуємо фільтри, якщо введено посилання, хендл або плейлист
   function updateFilterVisibility() {
     const rawVal = searchInput.value.trim();
     if (rawVal.length === 0 || isLinkOrHandle(rawVal)) {
@@ -461,7 +486,7 @@
     }
   }
 
-  // RFC 3339 Date calculation for YouTube publishedAfter
+  // ISO дата для фільтрації
   function getPublishedAfterISO(filterKey) {
     if (!filterKey || filterKey === 'all') return null;
     const now = new Date();
@@ -472,7 +497,7 @@
     return now.toISOString();
   }
 
-  // Filter Chip Event Handlers
+  // Обробники фільтрів
   timeFilterGroup.addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
@@ -497,7 +522,7 @@
     }
   });
 
-  // Input Event Listeners
+  // Події введення
   searchInput.addEventListener('input', () => {
     const rawVal = searchInput.value.trim();
     clearBtn.style.display = rawVal.length > 0 ? 'flex' : 'none';
@@ -506,14 +531,15 @@
     if (rawVal.length === 0) {
       clearTimeout(debounceTimer);
       resetState();
-      grid.innerHTML = '<div class="placeholder">enter search terms, channel link or @handle above</div>';
+      grid.innerHTML = '<div class="placeholder">enter search terms, playlist, channel link or @handle above</div>';
       return;
     }
 
     if (isLinkOrHandle(rawVal)) {
       clearTimeout(debounceTimer);
       status.className = 'status';
-      status.textContent = 'link or @handle detected — searching...';
+      const parsed = parseInput(rawVal);
+      status.textContent = `${parsed.type} link detected — loading...`;
       debounceTimer = setTimeout(() => {
         startSearch(rawVal);
       }, 400);
@@ -541,7 +567,7 @@
     clearTimeout(debounceTimer);
     resetState();
     updateFilterVisibility();
-    grid.innerHTML = '<div class="placeholder">enter search terms, channel link or @handle above</div>';
+    grid.innerHTML = '<div class="placeholder">enter search terms, playlist, channel link or @handle above</div>';
     searchInput.focus();
   });
 
@@ -596,13 +622,18 @@
     loadMoreBtn.disabled = true;
 
     try {
-      const isLink = isLinkOrHandle(rawInput);
-      const cleanedQuery = sanitizeInput(rawInput);
+      const parsed = parseInput(rawInput);
+      let url = `${API_ENDPOINT}?`;
 
-      let url = `${API_ENDPOINT}?channel=${encodeURIComponent(cleanedQuery)}&q=${encodeURIComponent(cleanedQuery)}`;
-      
-      // Pass parameters cleanly to backend
-      if (!isLink) {
+      // Формуємо URL залежно від типу введених даних
+      if (parsed.type === 'playlist') {
+        url += `playlistId=${encodeURIComponent(parsed.value)}`;
+      } else if (parsed.type === 'video') {
+        url += `videoId=${encodeURIComponent(parsed.value)}`;
+      } else if (parsed.type === 'channel' || parsed.type === 'handle') {
+        url += `channel=${encodeURIComponent(parsed.value)}&q=${encodeURIComponent(parsed.value)}`;
+      } else {
+        url += `q=${encodeURIComponent(parsed.value)}`;
         url += `&order=${encodeURIComponent(activeSort)}`;
         const publishedAfter = getPublishedAfterISO(activeTimeFilter);
         if (publishedAfter) {
@@ -633,9 +664,9 @@
         if (!append) grid.innerHTML = '<div class="placeholder">no videos found</div>';
         status.textContent = 'no videos found';
       } else {
-        renderVideos(videos, append);
+        renderVideos(videos, append, parsed.type === 'playlist');
         totalLoaded += videos.length;
-        status.textContent = `${totalLoaded} videos · click card to copy link`;
+        status.textContent = `${totalLoaded} videos ${parsed.type === 'playlist' ? 'in playlist ' : ''}· click card to copy link`;
       }
 
       nextPageToken = data.nextPageToken || null;
@@ -650,17 +681,21 @@
     }
   }
 
-  function renderVideos(videos, append) {
+  function renderVideos(videos, append, isPlaylist = false) {
     if (!append) grid.innerHTML = '';
 
-    videos.forEach(video => {
+    videos.forEach((video, index) => {
       const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
       const card = document.createElement('div');
       card.className = 'card';
 
+      // Порядковий номер у плейлисті (#1, #2...)
+      const playlistIndex = isPlaylist ? `<span class="playlist-index">#${(append ? totalLoaded : 0) + index + 1}</span>` : '';
+
       card.innerHTML = `
         <div class="thumb-box">
           <img src="${video.thumbnail}" alt="${escapeHtml(video.title)}" loading="lazy">
+          ${playlistIndex}
           ${video.duration ? `<span class="duration-badge">${escapeHtml(video.duration)}</span>` : ''}
           <div class="copy-flash">link copied</div>
         </div>

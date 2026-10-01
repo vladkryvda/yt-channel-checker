@@ -10,17 +10,19 @@
 
 <style>
   :root {
-    --bg: #F7F3EE;
-    --surface: #FFFFFF;
-    --border: #E5DCD3;
-    --border-hover: #CFC2B4;
-    --text: #2D2522;
-    --text-dim: #7D7067;
-    --text-faint: #B5A89E;
-    --accent: #C4593C;
-    --accent-hover: #AA472B;
-    --accent-soft: #F5EBE6;
-    --error: #B34A3B;
+    color-scheme: dark;
+    --bg: #131110;
+    --surface: #1C1917;
+    --surface-hover: #24201D;
+    --border: #2B2622;
+    --border-hover: #443C36;
+    --text: #EDE6DF;
+    --text-dim: #9E9287;
+    --text-faint: #635A52;
+    --accent: #E06D4D;
+    --accent-hover: #EA7E60;
+    --accent-soft: rgba(224, 109, 77, 0.12);
+    --error: #E55C4B;
     --font: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
   }
 
@@ -49,12 +51,13 @@
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 6px 6px 6px 16px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   }
 
   .search-box:focus-within {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(196, 89, 60, 0.1);
+    box-shadow: 0 0 0 3px rgba(224, 109, 77, 0.18);
+    background: #201D1A;
   }
 
   .search-icon {
@@ -155,6 +158,7 @@
   .chip:hover {
     border-color: var(--border-hover);
     color: var(--text);
+    background: var(--surface-hover);
   }
 
   .chip.active {
@@ -188,12 +192,14 @@
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 10px;
-    transition: border-color 0.2s ease, transform 0.2s ease;
+    transition: border-color 0.2s ease, transform 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   }
 
   .card:hover {
     border-color: var(--border-hover);
+    background: var(--surface-hover);
     transform: translateY(-2px);
+    box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.45);
   }
 
   .thumb-box {
@@ -201,7 +207,7 @@
     aspect-ratio: 16 / 9;
     overflow: hidden;
     border-radius: 11px;
-    background: var(--accent-soft);
+    background: #171412;
   }
 
   .thumb-box img {
@@ -218,12 +224,13 @@
     position: absolute;
     bottom: 6px;
     right: 6px;
-    background: rgba(45, 37, 34, 0.85);
-    color: #FFF;
+    background: rgba(10, 9, 8, 0.85);
+    color: #EDE6DF;
     font-size: 10px;
     padding: 2px 5px;
     border-radius: 4px;
-    backdrop-filter: blur(2px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(4px);
   }
 
   /* Порядковий номер у плейлисті */
@@ -231,7 +238,7 @@
     position: absolute;
     top: 6px;
     left: 6px;
-    background: rgba(196, 89, 60, 0.9);
+    background: rgba(224, 109, 77, 0.92);
     color: #FFF;
     font-size: 10px;
     font-weight: 600;
@@ -281,7 +288,7 @@
     inset: 10px 10px auto 10px;
     aspect-ratio: 16 / 9;
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(19, 17, 16, 0.94);
     border: 1px solid var(--accent);
     display: flex;
     align-items: center;
@@ -292,6 +299,7 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s ease;
+    backdrop-filter: blur(4px);
   }
 
   .card.copied .copy-flash { opacity: 1; }
@@ -307,7 +315,7 @@
   .skeleton-thumb {
     aspect-ratio: 16 / 9;
     border-radius: 11px;
-    background: linear-gradient(90deg, var(--border) 25%, var(--accent-soft) 50%, var(--border) 75%);
+    background: linear-gradient(90deg, #24201D 25%, #302A26 50%, #24201D 75%);
     background-size: 200% 100%;
     animation: skeleton-pulse 1.4s infinite;
   }
@@ -315,7 +323,7 @@
   .skeleton-line {
     height: 12px;
     border-radius: 4px;
-    background: var(--border);
+    background: #24201D;
     margin-top: 10px;
     animation: skeleton-pulse 1.4s infinite;
   }
@@ -352,12 +360,13 @@
     justify-content: center;
     color: var(--text-dim);
     cursor: pointer;
-    transition: border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    transition: border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, background 0.2s ease;
   }
 
   #loadMoreBtn:hover {
     border-color: var(--accent);
     color: var(--accent);
+    background: var(--surface-hover);
     transform: translateY(-1px);
   }
 
